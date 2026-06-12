@@ -14,6 +14,7 @@ import (
 func main() {
     godotenv.Load()
 
+    ctx := context.Background()
 
     //initialise the store
     store := storage.NewStore()
@@ -40,13 +41,31 @@ func main() {
     }
 
     //start the server 
-    port := ":8080"
-    println("Server is running on port", port)
-    
-    if err := http.ListenAndServe(port, rateHandler); err != nil {
-    println("Error starting server:", err)
+    // port := ":8080"
+    println("Server is running on port", s.Addr)
+
+    // buat channel untuk jadi medium pengirim sinyal
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, os.Interrupt)
+
+
+    // go s.ListenAndServe()
+
+    // if err := http.ListenAndServe(port, rateHandler); err != nil {
+    // ini anonymouse function makanya ga punya nama
+    // ini udah dibuat goroutine juga
+    go func() {
+        if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+        println("Error starting server:", err)
+        } else if err == http.ErrServerClosed{
+            println("Server berhasil dimatikan")
+        }
+    } ()
+
+    <- quit
+
+    if err := s.Shutdown(ctx); err != nil {
+        println("Error shutdown, ada kejanggalan: ", err)
     }
-    
-    s.ListenAndServe()
 
 }

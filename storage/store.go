@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
     "log"
+    _ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -39,8 +40,10 @@ func NewStore() *Store{
 }
 
 //Save adds a new URL mapping to the store 
-func (s *Store) Save(shortURL, longURL string){
+func (s *Store) Save(shortURL, longURL string) error{
     ctx := context.Background()
+
+    // log.Printf("Saving shortURL: %v", shortURL) // buat debugging
 
     // udah ga pakai mu
     // s.mu.Lock() // Lock for writing 
@@ -55,8 +58,10 @@ func (s *Store) Save(shortURL, longURL string){
     // gapake in memory lagi, pake sql:
     _, err2 := s.db.ExecContext(ctx, "INSERT INTO urls (short_url, long_url) VALUES ($1, $2)", shortURL, longURL)
     if err2 != nil {
-        log.Fatal(err2)
+        // log.Fatal(err2) // yang bikin error
+        return err2
     }
+    return nil // kalau ga ada error
 }
 
 // Get Retreives a long URL for a given short URL 
@@ -88,4 +93,24 @@ func (s *Store) Get(shortURL string)(string, bool){
     }
 
     return longURL, true
+}
+
+// Delete  
+func (s *Store) Delete(shortURL string){
+    ctx := context.Background()
+
+    // redis ini
+    val, err := s.redisClient.Del(ctx, shortURL).Result()
+
+    // log.Printf("Redis Del result: %v, err: %v", val, err) // buat debugging 
+    
+    if err != nil {
+        log.Printf("%v", val)
+    }
+
+    // var longURL string
+    _, err2 :=  s.db.ExecContext(ctx, "DELETE FROM urls WHERE short_url = $1", shortURL)
+        if err2 != nil {
+        log.Fatal(err2)
+    }
 }
