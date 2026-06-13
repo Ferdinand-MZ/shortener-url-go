@@ -25,7 +25,7 @@ A production-ready URL shortener built with Go, featuring Redis caching, Postgre
 
 ## System Architecture
 <p align="center">
-  <img src="./url_shortener_architecture.svg"
+  <img src="https://github.com/user-attachments/assets/07f78e2a-87bd-406b-a6e2-f05a7fe261bf"
        alt="URL Shortener Architecture"
        width="900">
 </p>
