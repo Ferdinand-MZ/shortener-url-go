@@ -10,12 +10,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Store represents an in-memory storage for URL mappings
-// tapi diganti sekarang pakai postgresql
 type Store struct {
-    // urls map[string]string // Key : Short URL, Value: Long URL || gapake in memory lagi
     db  *sql.DB
-    // mu  sync.RWMutex // Mutex for concurrent access: 1 writer and multiple readers || tapi ga dipake karena pakai postgresql
     redisClient *redis.Client    
 }
 
@@ -43,48 +39,46 @@ func NewStore() *Store{
 func (s *Store) Save(shortURL, longURL string) error{
     ctx := context.Background()
 
-    // log.Printf("Saving shortURL: %v", shortURL) // buat debugging
-
-    // udah ga pakai mu
-    // s.mu.Lock() // Lock for writing 
-    // defer s.mu.Unlock() // Unlock after writing
-
     err := s.redisClient.Set(ctx, shortURL, longURL, 24*time.Hour).Err()
+    // err := s.redisClient.Set(ctx, shortURL, longURL, 10*time.Second).Err() // buat testing
+    log.Printf("shortURL: %v", shortURL)
     if err != nil {
         panic(err)
     }
 
-    // s.urls[shortURL] = longURL // Save the mapping 
-    // gapake in memory lagi, pake sql:
-    _, err2 := s.db.ExecContext(ctx, "INSERT INTO urls (short_url, long_url) VALUES ($1, $2)", shortURL, longURL)
+
+
+    // _, err2 := s.db.ExecContext(ctx, "INSERT INTO urls (short_url, long_url, expires_at) VALUES ($1, $2, NOW() + INTERVAL '30 seconds')", shortURL, longURL) // for testing
+    _, err2 := s.db.ExecContext(ctx, "INSERT INTO urls (short_url, long_url, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hour')", shortURL, longURL)
     if err2 != nil {
-        // log.Fatal(err2) // yang bikin error
         return err2
     }
-    return nil // kalau ga ada error
+    return nil
 }
 
 // Get Retreives a long URL for a given short URL 
 func (s *Store) Get(shortURL string)(string, bool){
     ctx := context.Background()
 
-    // gapake in memory
-    // s.mu.RLock() // Lock for reading 
-    // defer s.mu.RUnlock() // Unlock after reading
+
     
-    val, err := s.redisClient.Get(ctx, shortURL).Result()    
+    val, err := s.redisClient.Get(ctx, shortURL).Result()   
+    ttl, _ := s.redisClient.TTL(ctx, shortURL).Result() // kita ga perlu handling error redis, karena sudah ada di atas variabel err
+    log.Printf("Redis err: %v, TTL: %v", err, ttl)
+    
+
     // cek redis
     if err == nil {
         // kalau miss, return langsung
-        return val, true
+        if ttl <= 0 {
+            return "", false
+        }
+            // ga perlu tambahin ttl > 0
+            return val, true
     }
 
-    // kalau hit, buat ini
-    // longURL, exists := // s.db[shortURL] 
-    // ExecContext untuk insert/update/delete
-
     var longURL string
-    err2 :=  s.db.QueryRowContext(ctx, "SELECT long_url FROM urls WHERE short_url = $1", shortURL).Scan(&longURL)
+    err2 :=  s.db.QueryRowContext(ctx, "SELECT long_url FROM urls WHERE short_url = $1 AND expires_at > NOW()", shortURL).Scan(&longURL)
     if err2 == sql.ErrNoRows {
         log.Printf("Ga ada user dengan yang terdeteksi")
         return "", false // wajib tetep di return biar ga langsung ke kondisi bawah
